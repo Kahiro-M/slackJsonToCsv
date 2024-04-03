@@ -22,7 +22,7 @@ USER_FILE_NAME = 'users.json'
 
 # jsonファイルをjson辞書に変換
 def json_file_to_data(full_path):
-        f = open(full_path, 'r')
+        f = open(full_path, 'r', encoding='utf-8')
 
         converted = json.load(f)
 
@@ -45,10 +45,18 @@ def get_users(source_dir):
 
     return users
 
+# メンションをuserデータから名称に変換
+def replace_mentions(text, mentions_dict):
+    for user_id, username in mentions_dict.items():
+        mention_tag = f'<@{user_id}>'
+        text = text.replace(mention_tag, '@'+f'{username}')
+    return text
+
 # 1メッセージのjson辞書データをカンマ区切りの1行データに変換
 def get_line_text(users, item):
 
     text = f'{item[TEXT_KEY]}'.replace('"', '\"')
+    text = replace_mentions(text, users)
     name = ''
     
     if USER_KEY in item.keys():
