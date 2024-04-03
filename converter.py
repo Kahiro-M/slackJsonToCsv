@@ -14,6 +14,7 @@ REAL_NAME_KEY = 'real_name'
 DISPLAY_NAME_KEY = 'display_name'
 FILES_KEY = 'files'
 URL_KEY = 'url_private'
+CLIENT_MSG_ID_KEY = 'client_msg_id'
 
 OUT_PUT_DIR_NAME = 'slack_csv_output'
 USER_FILE_NAME = 'users.json'
@@ -64,6 +65,10 @@ def get_line_text(users, item):
         if user_id in users.keys():
             name = users[user_id]
 
+    msg_id = ''
+    if CLIENT_MSG_ID_KEY in item.keys():
+        msg_id = item[CLIENT_MSG_ID_KEY]
+
     urls = ''
 
     if FILES_KEY in item.keys():
@@ -75,7 +80,7 @@ def get_line_text(users, item):
             url = f"{attachmentFile[URL_KEY]}".replace('"', '\"')
             urls += f'{url}\n'
 
-    return f'{date},{name},"{text}","{urls}"\n'
+    return f'{date},{name},"{text}","{urls}","{msg_id}"\n'
 
 # 失敗手続き
 def failed(text):
@@ -119,7 +124,7 @@ for channel in channels:
     print(f'[{channel}]')
 
     json_files = sorted(glob.glob(f"{source_dir}/{channel}/*.json"))
-    lines = "date,name,text,files\n"
+    lines = "date,name,text,files,msgid\n"
 
     # 日付名のjsonファイル単位でループ
     for file_full_path in json_files: 
