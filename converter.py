@@ -86,7 +86,7 @@ def get_line_text(users, item, channel, date):
         msg = date+name+text+urls+channel
         msg_id = hashlib.sha256(msg.encode()).hexdigest()
 
-    return f'{date},{name},"{text}","{urls}","{msg_id}","{channel}"\n'
+    return f'"{date}","{name}","{text}","{urls}","{msg_id}","{channel}"\n'
 
 # 失敗手続き
 def failed(text):
@@ -126,7 +126,7 @@ def convert_json_to_csv_for_slack(source_dir):
         print(f'[{channel}]')
 
         json_files = sorted(glob.glob(f"{source_dir}/{channel}/*.json"))
-        header = 'date,name,text,files,msgid,channel\n'
+        header = '"date","name","text","files","msgid","channel"\n'
         lines = ''
 
         # 日付名のjsonファイル単位でループ

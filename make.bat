@@ -1,1 +1,1 @@
-pyinstaller --onefile --icon=icon.ico converter.py
+pyinstaller -n json2csv4slack --onefile --icon=icon.ico converter.py
