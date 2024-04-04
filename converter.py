@@ -23,6 +23,7 @@ DATETIME_KEY = 'ts'
 
 OUT_PUT_DIR_NAME = 'slack_csv_output'
 USER_FILE_NAME = 'users.json'
+TIMESTAMP_MODE = ['kintone','iso8601']
 
 # functions =====================
 
@@ -59,7 +60,7 @@ def replace_mentions(text, mentions_dict):
     return text
 
 # 1メッセージのjson辞書データをカンマ区切りの1行データに変換
-def get_line_text(users, item, channel):
+def get_line_text(users, item, channel, mode):
 
     text = f'{item[TEXT_KEY]}'.replace('"', '\"').replace('"', '""')
     text = replace_mentions(text, users)
@@ -87,7 +88,10 @@ def get_line_text(users, item, channel):
         unix_timestamp_int = int(float(item[DATETIME_KEY]))
         unix_timestamp_frac = int((float(item[DATETIME_KEY]) - unix_timestamp_int) * 1e6)  # マイクロ秒単位に変換
         standard_time = datetime.datetime.fromtimestamp(unix_timestamp_int) + datetime.timedelta(microseconds=unix_timestamp_frac)
-        timestamp = standard_time.strftime("%Y-%m-%d %H:%M:%S")
+        if(mode.lower() in TIMESTAMP_MODE):
+            timestamp = standard_time.strftime("%Y-%m-%dT%H:%M:%S+09:00")
+        else:
+            timestamp = standard_time.strftime("%Y-%m-%d %H:%M:%S")
 
     msg_id = ''
     if CLIENT_MSG_ID_KEY in item.keys():
@@ -108,7 +112,7 @@ def failed(text):
 
 # core logics =====================
 
-def convert_json_to_csv_for_slack(source_dir):
+def convert_json_to_csv_for_slack(source_dir,mode=''):
 
     if not os.path.exists(source_dir):
         failed(f'not exists directory: {source_dir}')
@@ -154,7 +158,7 @@ def convert_json_to_csv_for_slack(source_dir):
                 if not TEXT_KEY in item.keys():
                     continue
 
-                lines += get_line_text(users, item, channel)
+                lines += get_line_text(users, item, channel,mode)
 
             print(f'\t{date} ({len(json_dic)})')
 
@@ -182,10 +186,14 @@ if __name__ == '__main__':
 
     if len(argv) < 2:
         failed('Please add argument of zip file')
+    if len(argv) == 2:
+        mode = ''
+    if len(argv) == 3:
+        mode = argv[2]
 
     source_file = argv[1]
     unzip_source_dir = os.path.splitext(source_file)[0]
 
     unzip([source_file,unzip_source_dir])
 
-    convert_json_to_csv_for_slack(unzip_source_dir)
+    convert_json_to_csv_for_slack(unzip_source_dir,mode)
