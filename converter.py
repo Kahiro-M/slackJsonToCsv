@@ -6,6 +6,7 @@ import glob
 import json
 import hashlib
 from unziplib import unzip
+import datetime
 
 # defines =====================
 
@@ -18,6 +19,7 @@ DISPLAY_NAME_KEY = 'display_name'
 FILES_KEY = 'files'
 URL_KEY = 'url_private'
 CLIENT_MSG_ID_KEY = 'client_msg_id'
+DATETIME_KEY = 'ts'
 
 OUT_PUT_DIR_NAME = 'slack_csv_output'
 USER_FILE_NAME = 'users.json'
@@ -57,7 +59,7 @@ def replace_mentions(text, mentions_dict):
     return text
 
 # 1メッセージのjson辞書データをカンマ区切りの1行データに変換
-def get_line_text(users, item, channel, date):
+def get_line_text(users, item, channel):
 
     text = f'{item[TEXT_KEY]}'.replace('"', '\"').replace('"', '""')
     text = replace_mentions(text, users)
@@ -78,15 +80,24 @@ def get_line_text(users, item, channel, date):
             url = f"{attachmentFile[URL_KEY]}".replace('"', '\"')
             urls += f'{url}'
 
+    # UNIX時間を標準時間に変換()
+    timestamp = ''
+    if DATETIME_KEY in item.keys():
+        # UNIX時間を整数部分と小数部分に分ける
+        unix_timestamp_int = int(float(item[DATETIME_KEY]))
+        unix_timestamp_frac = int((float(item[DATETIME_KEY]) - unix_timestamp_int) * 1e6)  # マイクロ秒単位に変換
+        standard_time = datetime.datetime.fromtimestamp(unix_timestamp_int) + datetime.timedelta(microseconds=unix_timestamp_frac)
+        timestamp = standard_time.strftime("%Y-%m-%d %H:%M:%S")
+
     msg_id = ''
     if CLIENT_MSG_ID_KEY in item.keys():
         msg_id = item[CLIENT_MSG_ID_KEY]
     else:
         # msg_idが無い場合は作成する
-        msg = date+name+text+urls+channel
+        msg = timestamp+name+text+urls+channel
         msg_id = hashlib.sha256(msg.encode()).hexdigest()
 
-    return f'"{date}","{name}","{text}","{urls}","{msg_id}","{channel}"\n'
+    return f'"{timestamp}","{name}","{text}","{urls}","{msg_id}","{channel}"\n'
 
 # 失敗手続き
 def failed(text):
@@ -126,7 +137,7 @@ def convert_json_to_csv_for_slack(source_dir):
         print(f'[{channel}]')
 
         json_files = sorted(glob.glob(f"{source_dir}/{channel}/*.json"))
-        header = '"date","name","text","files","msgid","channel"\n'
+        header = '"timestamp","name","text","files","msgid","channel"\n'
         lines = ''
 
         # 日付名のjsonファイル単位でループ
@@ -143,7 +154,7 @@ def convert_json_to_csv_for_slack(source_dir):
                 if not TEXT_KEY in item.keys():
                     continue
 
-                lines += get_line_text(users, item, channel, date)
+                lines += get_line_text(users, item, channel)
 
             print(f'\t{date} ({len(json_dic)})')
 
