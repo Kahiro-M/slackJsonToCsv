@@ -173,7 +173,7 @@ if __name__ == '__main__':
         failed('Please add argument of zip file')
 
     source_file = argv[1]
-    unzip_source_dir = os.path.splitext(os.path.basename(source_file))[0]
+    unzip_source_dir = os.path.splitext(source_file)[0]
 
     unzip([source_file,unzip_source_dir])
 
