@@ -1,9 +1,11 @@
+#coding: UTF-8
 from cgitb import text
 import sys
 import os
 import glob
 import json
 import hashlib
+from unziplib import unzip
 
 # defines =====================
 
@@ -55,7 +57,7 @@ def replace_mentions(text, mentions_dict):
     return text
 
 # 1メッセージのjson辞書データをカンマ区切りの1行データに変換
-def get_line_text(users, item, channel):
+def get_line_text(users, item, channel, date):
 
     text = f'{item[TEXT_KEY]}'.replace('"', '\"')
     text = replace_mentions(text, users)
@@ -92,78 +94,87 @@ def failed(text):
     print('failed...')
     exit()
 
+
 # core logics =====================
 
-# 引数からソースフォルダ情報取得
-argv = sys.argv
+def convert_json_to_csv_for_slack(source_dir):
 
-if len(argv) < 2:
-    failed('Please add argument of work directory')
+    if not os.path.exists(source_dir):
+        failed(f'not exists directory: {source_dir}')
 
-source_dir = argv[1]
+    print(f'Source directory > {source_dir}')
 
-if not os.path.exists(source_dir):
-    failed(f'not exists directory: {source_dir}')
+    # 出力フォルダの作成
+    output_dir = f'{source_dir}/../{OUT_PUT_DIR_NAME}'
 
-print(f'Source directory > {source_dir}')
+    if os.path.exists(output_dir):
+        failed(f'already exists output directory: {output_dir}')
 
-# 出力フォルダの作成
-output_dir = f'{source_dir}/../{OUT_PUT_DIR_NAME}'
+    print(f'Create output dir > {output_dir}/')
+    os.makedirs(output_dir)
 
-if os.path.exists(output_dir):
-    failed(f'already exists output directory: {output_dir}')
+    # jsonファイルを省いたチャンネル名のフォルダ一覧の取得
+    channels = sorted(os.listdir(path=source_dir))
+    channels = [x for x in channels if not x.endswith('.json')] 
 
-print(f'Create output dir > {output_dir}/')
-os.makedirs(output_dir)
+    users = get_users(f'{source_dir}/{USER_FILE_NAME}')
 
-# jsonファイルを省いたチャンネル名のフォルダ一覧の取得
-channels = sorted(os.listdir(path=source_dir))
-channels = [x for x in channels if not x.endswith('.json')] 
+    # channelフォルダ単位でループ
+    hasHeader = False
+    for channel in channels: 
 
-users = get_users(f'{source_dir}/{USER_FILE_NAME}')
+        print(f'[{channel}]')
 
-# channelフォルダ単位でループ
-hasHeader = False
-for channel in channels: 
+        json_files = sorted(glob.glob(f"{source_dir}/{channel}/*.json"))
+        header = 'date,name,text,files,msgid,channel\n'
+        lines = ''
 
-    print(f'[{channel}]')
+        # 日付名のjsonファイル単位でループ
+        for file_full_path in json_files: 
 
-    json_files = sorted(glob.glob(f"{source_dir}/{channel}/*.json"))
-    header = 'date,name,text,files,msgid,channel\n'
-    lines = ''
+            file_name = os.path.split(file_full_path)[1]
+            date = file_name.replace('.json', '')
 
-    # 日付名のjsonファイル単位でループ
-    for file_full_path in json_files: 
+            json_dic = json_file_to_data(file_full_path)
 
-        file_name = os.path.split(file_full_path)[1]
-        date = file_name.replace('.json', '')
+            # メッセージ単位ループ
+            for item in json_dic: 
 
-        json_dic = json_file_to_data(file_full_path)
+                if not TEXT_KEY in item.keys():
+                    continue
 
-        # メッセージ単位ループ
-        for item in json_dic: 
+                lines += get_line_text(users, item, channel, date)
 
-            if not TEXT_KEY in item.keys():
-                continue
+            print(f'\t{date} ({len(json_dic)})')
 
-            lines += get_line_text(users, item, channel)
-
-        print(f'\t{date} ({len(json_dic)})')
-
-    # 変換した情報をチャンネル名のcsvファイルに書き込み
-    out_file_path = f"{output_dir}/{channel}.csv"
-    f = open(out_file_path, 'w')
-    f.write(header)
-    f.write(lines)
-    f.close()
-
-    # 全チャンネルのcsvファイルに書き込み
-    out_file_path = f"{output_dir}/ALL_CHANNEL.csv"
-    f = open(out_file_path, 'a')
-    if(hasHeader == False):
+        # 変換した情報をチャンネル名のcsvファイルに書き込み
+        out_file_path = f"{output_dir}/{channel}.csv"
+        f = open(out_file_path, 'w')
         f.write(header)
-        hasHeader = True
-    f.write(lines)
-    f.close()
+        f.write(lines)
+        f.close()
 
-print(f'{len(channels)} channels converted.')
+        # 全チャンネルのcsvファイルに書き込み
+        out_file_path = f"{output_dir}/ALL_CHANNEL_TALK_DATA.csv"
+        f = open(out_file_path, 'a')
+        if(hasHeader == False):
+            f.write(header)
+            hasHeader = True
+        f.write(lines)
+        f.close()
+
+    print(f'{len(channels)} channels converted.')
+
+if __name__ == '__main__':
+    # 引数からソースフォルダ情報取得
+    argv = sys.argv
+
+    if len(argv) < 2:
+        failed('Please add argument of zip file')
+
+    source_file = argv[1]
+    unzip_source_dir = os.path.splitext(os.path.basename(source_file))[0]
+
+    unzip([source_file,unzip_source_dir])
+
+    convert_json_to_csv_for_slack(unzip_source_dir)
