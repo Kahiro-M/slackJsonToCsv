@@ -76,7 +76,7 @@ def get_line_text(users, item, channel, date):
                 continue
 
             url = f"{attachmentFile[URL_KEY]}".replace('"', '\"')
-            urls += f'{url}\n'
+            urls += f'{url}'
 
     msg_id = ''
     if CLIENT_MSG_ID_KEY in item.keys():
