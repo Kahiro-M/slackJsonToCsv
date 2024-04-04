@@ -3,6 +3,7 @@ import sys
 import os
 import glob
 import json
+import hashlib
 
 # defines =====================
 
@@ -54,23 +55,18 @@ def replace_mentions(text, mentions_dict):
     return text
 
 # 1メッセージのjson辞書データをカンマ区切りの1行データに変換
-def get_line_text(users, item):
+def get_line_text(users, item, channel):
 
     text = f'{item[TEXT_KEY]}'.replace('"', '\"')
     text = replace_mentions(text, users)
+
     name = ''
-    
     if USER_KEY in item.keys():
         user_id = item[USER_KEY]
         if user_id in users.keys():
             name = users[user_id]
 
-    msg_id = ''
-    if CLIENT_MSG_ID_KEY in item.keys():
-        msg_id = item[CLIENT_MSG_ID_KEY]
-
     urls = ''
-
     if FILES_KEY in item.keys():
         for attachmentFile in item[FILES_KEY]:
 
@@ -80,7 +76,15 @@ def get_line_text(users, item):
             url = f"{attachmentFile[URL_KEY]}".replace('"', '\"')
             urls += f'{url}\n'
 
-    return f'{date},{name},"{text}","{urls}","{msg_id}"\n'
+    msg_id = ''
+    if CLIENT_MSG_ID_KEY in item.keys():
+        msg_id = item[CLIENT_MSG_ID_KEY]
+    else:
+        # msg_idが無い場合は作成する
+        msg = date+name+text+urls+channel
+        msg_id = hashlib.sha256(msg.encode()).hexdigest()
+
+    return f'{date},{name},"{text}","{urls}","{msg_id}","{channel}"\n'
 
 # 失敗手続き
 def failed(text):
@@ -119,12 +123,14 @@ channels = [x for x in channels if not x.endswith('.json')]
 users = get_users(f'{source_dir}/{USER_FILE_NAME}')
 
 # channelフォルダ単位でループ
+hasHeader = False
 for channel in channels: 
 
     print(f'[{channel}]')
 
     json_files = sorted(glob.glob(f"{source_dir}/{channel}/*.json"))
-    lines = "date,name,text,files,msgid\n"
+    header = 'date,name,text,files,msgid,channel\n'
+    lines = ''
 
     # 日付名のjsonファイル単位でループ
     for file_full_path in json_files: 
@@ -140,13 +146,23 @@ for channel in channels:
             if not TEXT_KEY in item.keys():
                 continue
 
-            lines += get_line_text(users, item)
+            lines += get_line_text(users, item, channel)
 
         print(f'\t{date} ({len(json_dic)})')
 
     # 変換した情報をチャンネル名のcsvファイルに書き込み
     out_file_path = f"{output_dir}/{channel}.csv"
     f = open(out_file_path, 'w')
+    f.write(header)
+    f.write(lines)
+    f.close()
+
+    # 全チャンネルのcsvファイルに書き込み
+    out_file_path = f"{output_dir}/ALL_CHANNEL.csv"
+    f = open(out_file_path, 'a')
+    if(hasHeader == False):
+        f.write(header)
+        hasHeader = True
     f.write(lines)
     f.close()
 
