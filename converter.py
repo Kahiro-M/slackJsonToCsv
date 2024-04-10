@@ -164,18 +164,18 @@ def convert_json_to_csv_for_slack(source_dir,mode=''):
 
         # 変換した情報をチャンネル名のcsvファイルに書き込み
         out_file_path = f"{output_dir}/{channel}.csv"
-        f = open(out_file_path, 'w')
-        f.write(header)
-        f.write(lines)
+        f = open(out_file_path, 'wb')
+        f.write(header.encode('cp932', 'ignore'))
+        f.write(lines.encode('cp932', 'ignore'))
         f.close()
 
         # 全チャンネルのcsvファイルに書き込み
         out_file_path = f"{output_dir}/ALL_CHANNEL_TALK_DATA.csv"
-        f = open(out_file_path, 'a')
+        f = open(out_file_path, 'ab')
         if(hasHeader == False):
-            f.write(header)
+            f.write(header.encode('cp932', 'ignore'))
             hasHeader = True
-        f.write(lines)
+        f.write(lines.encode('cp932', 'ignore'))
         f.close()
 
     print(f'{len(channels)} channels converted.')
