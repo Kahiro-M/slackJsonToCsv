@@ -1,35 +1,46 @@
 # json_to_csv_for_slack
 Convert to csv from exported json data in slack service.
 
-[Qiita](https://qiita.com/beckyJPN/items/4c94a35587d51a0fba0c)に日本語でも記事を書いています。
+[Qiita](https://qiita.com/beckyJPN/items/4c94a35587d51a0fba0c)にフォーク元の制作者の記事があります。
 
 # Environment
 
-- OS: macOS Monterey (12.5)
-- python: 3.10.5
+- OS: Windows 11 23H2
+- python: 3.11.1
+- pyinstaller: 6.5.0
 
-# Export json file
+# Export json file or SQL
 
 check for [official site](https://slack.com/intl/ja-jp/help/articles/201658943-%E3%83%AF%E3%83%BC%E3%82%AF%E3%82%B9%E3%83%9A%E3%83%BC%E3%82%B9%E3%81%AE%E3%83%87%E3%83%BC%E3%82%BF%E3%82%92%E3%82%A8%E3%82%AF%E3%82%B9%E3%83%9D%E3%83%BC%E3%83%88%E3%81%99%E3%82%8B).
 
 # How to use
 
-Because there is a file called `converter.py`
-In the terminal, 
-specify the top folder of the exported data expanded by slack 
-with the full path in the first argument as shown below, 
-and execute it with python.
-
 ```sh
-$ python converter.ph /Users/username/Desktop/my_workspace
+# argv 1 : zip file path
+# argv 2 : timestamp format
+#          'kintone' or 'iso8601' -> YYYY-MM-DDTHH:MM:SS+09:00
+#          other or NULL          -> YYYY-MM-DD HH:MM:SS
+# argv 3 : output mode
+#          'csv'         -> *.csv output
+#          'mysql'       -> slack_log_mysql.sql (MySQL format) output
+#                           (timestamp format [YYYY-MM-DD HH:MM:SS] only)
+#          'sqlite'      -> slack_log_sqlite.sql (SQLite format) and SlackLog.db output
+#                           (timestamp format [YYYY-MM-DD HH:MM:SS] only)
+#          other or NULL ->  *.csv output
+
+
+# ex.)
+
+$ python converter.py slack_log.zip kintone
+
+# slack_csv_output/ALL_CHANNEL_TALK_DATA.csv
+# slack_csv_output/[channel name].csv etc... 
+# csv timestamp format is [YYYY-MM-DDTHH:MM:SS+09:00]
+
+
+$ python converter.py slack_log.zip other sqlite
+
+# slack_csv_output/slack_log_sqlite.sql
+# slack_csv_output/SlackLog.db
+# csv timestamp format is [YYYY-MM-DD HH:MM:SS]
 ```
-
-After execution, a folder name slack_csv_output will be created in parallel with the specified folder.
-A file called `channel_name.csv` is created in it.
-If there is already a folder with the same name, an error will occur, so delete it in advance.
-
-Columns are created in each csv with the following correspondence, and each message is converted as a row.
-`date` > Post date (obtained from file name)
-`name` > full name or display name
-`text` > Posted message
-`files` > URL of attached file (If there are multiple attachments, display them with line breaks)
