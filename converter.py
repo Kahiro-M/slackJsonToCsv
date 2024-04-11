@@ -8,6 +8,7 @@ import hashlib
 from unziplib import unzip
 import datetime
 import shutil
+import sqlite3
 
 # defines =====================
 
@@ -25,7 +26,7 @@ DATETIME_KEY = 'ts'
 OUT_PUT_DIR_NAME = 'slack_csv_output'
 USER_FILE_NAME = 'users.json'
 TIMESTAMP_MODE = ['kintone','iso8601']
-OUTPUT_MODE = ['csv','sql']
+OUTPUT_MODE = ['csv','mysql','sqlite']
 
 # functions =====================
 
@@ -90,7 +91,7 @@ def get_line_text(users, item, channel, timestamp_mode, output_mode):
         unix_timestamp_int = int(float(item[DATETIME_KEY]))
         unix_timestamp_frac = int((float(item[DATETIME_KEY]) - unix_timestamp_int) * 1e6)  # マイクロ秒単位に変換
         standard_time = datetime.datetime.fromtimestamp(unix_timestamp_int) + datetime.timedelta(microseconds=unix_timestamp_frac)
-        if(output_mode.lower() == 'sql'):
+        if(output_mode.lower() in ['mysql','sqlite']):
             timestamp = standard_time.strftime("%Y-%m-%d %H:%M:%S")
         else:
             if(timestamp_mode.lower() in TIMESTAMP_MODE):
@@ -106,7 +107,7 @@ def get_line_text(users, item, channel, timestamp_mode, output_mode):
         msg = timestamp+name+text+urls+channel
         msg_id = hashlib.sha256(msg.encode()).hexdigest()
     
-    if(output_mode.lower() == 'sql'):
+    if(output_mode.lower() in ['mysql','sqlite']):
         return f"('{timestamp}','{name}','{text}','{urls}','{msg_id}','{channel}')"
     else:
         return f'"{timestamp}","{name}","{text}","{urls}","{msg_id}","{channel}"\n'
@@ -117,6 +118,11 @@ def failed(text):
     print('failed...')
     exit()
 
+# 外部SQLファイルからクエリ作成
+def get_query(query_file_path):
+    with open(query_file_path, 'r', encoding='utf-8') as f:
+        query = f.read()
+    return query
 
 # core logics =====================
 
@@ -139,8 +145,14 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
     # jsonファイルを省いたチャンネル名のフォルダ一覧の取得
     channels = sorted(os.listdir(path=source_dir))
     channels = [x for x in channels if not x.endswith('.json')] 
-    if(output_mode.lower() == 'sql'):
-        out_file_path = shutil.copy2("slack_log_template.sql",f"{output_dir}/slack_log.sql")
+    if(output_mode.lower() in ['mysql','sqlite']):
+        if(output_mode.lower() in ['mysql']):
+            out_file_path = shutil.copy2("slack_log_mysql_template.sql",f"{output_dir}/slack_log_mysql.sql")
+        elif(output_mode.lower() in ['sqlite']):
+            out_file_path = shutil.copy2("slack_log_sqlite_template.sql",f"{output_dir}/slack_log_sqlite.sql")
+        else:
+            out_file_path = shutil.copy2("slack_log_mysql_template.sql",f"{output_dir}/slack_log_mysql.sql")
+
         hasHeader = False
         isFirst = True
         header = """
@@ -162,7 +174,7 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
                 lines = f",\n('{channel['id']}','{channel['name']}','{channel['is_private']}')"
             
             
-            # メッセージSQLファイルに書き込み
+            # SlackLogSQLファイルに書き込み
             f = open(out_file_path, 'a', encoding='utf-8')
             if(hasHeader == False):
                 f.write(header)
@@ -170,15 +182,15 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
             f.write(lines)
             f.close()
 
-        # メッセージSQLファイルの末尾に;を書き込む
+        # SlackLogSQLファイルの末尾に;を書き込む
         f = open(out_file_path, 'a', encoding='utf-8')
         f.write(';')
         f.close()
+        print(f'{len(channels_json_dic)} channels SQL converted.')
         
 
     users = get_users(f'{source_dir}/{USER_FILE_NAME}')
-    if(output_mode.lower() == 'sql'):
-        out_file_path = f"{output_dir}/slack_log.sql"
+    if(output_mode.lower() in ['mysql','sqlite']):
         hasHeader = False
         isFirst = True
         header = """
@@ -200,7 +212,7 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
                 lines = f",\n('{user['id']}','{user['profile']['display_name']}')"
             
             
-            # メッセージSQLファイルに書き込み
+            # SlackLogSQLファイルに書き込み
             f = open(out_file_path, 'a', encoding='utf-8')
             if(hasHeader == False):
                 f.write(header)
@@ -208,10 +220,11 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
             f.write(lines)
             f.close()
 
-        # メッセージSQLファイルの末尾に;を書き込む
+        # SlackLogSQLファイルの末尾に;を書き込む
         f = open(out_file_path, 'a', encoding='utf-8')
         f.write(';')
         f.close()
+        print(f'{len(users_json_dic)} users SQL converted.')
 
 
     # channelフォルダ単位でループ
@@ -219,8 +232,7 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
     isFirst = True
 
     # SQL出力
-    if(output_mode.lower() == 'sql'):
-        out_file_path = f"{output_dir}/slack_log.sql"
+    if(output_mode.lower() in ['mysql','sqlite']):
         for channel in channels: 
 
             print(f'[{channel}]')
@@ -259,7 +271,7 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
                 print(f'\t{date} ({len(json_dic)})')
 
 
-            # メッセージSQLファイルに書き込み
+            # SlackLogSQLファイルに書き込み
             f = open(out_file_path, 'a', encoding='utf-8')
             if(hasHeader == False):
                 f.write(header)
@@ -267,12 +279,28 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
             f.write(lines)
             f.close()
 
-        # メッセージSQLファイルの末尾に;を書き込む
+        # SlackLogSQLファイルの末尾に;を書き込む
         f = open(out_file_path, 'a', encoding='utf-8')
         f.write(';')
         f.close()
 
-        print(f'{len(channels)} channels converted.')
+        print(f'{len(channels)} channels SQL converted.')
+
+        # SQLiteはDBファイルも作成
+        if(output_mode.lower() in ['sqlite']):
+            dbname = f"{output_dir}/SlackLog.db"
+            conn = sqlite3.connect(dbname)
+            # sqliteを操作するカーソルオブジェクトを作成
+            cur = conn.cursor()
+
+            # SQL実行
+            query = get_query(out_file_path)
+            cur.executescript(query)
+            
+            # コミット
+            conn.commit()
+            conn.close()
+
 
     # CSV出力
     else:
