@@ -27,6 +27,7 @@ OUT_PUT_DIR_NAME = 'slack_csv_output'
 USER_FILE_NAME = 'users.json'
 TIMESTAMP_MODE = ['kintone','iso8601']
 OUTPUT_MODE = ['csv','mysql','sqlite']
+OUTPUT_SQL_MODE = ['mysql','sqlite']
 
 # functions =====================
 
@@ -91,7 +92,7 @@ def get_line_text(users, item, channel, timestamp_mode, output_mode):
         unix_timestamp_int = int(float(item[DATETIME_KEY]))
         unix_timestamp_frac = int((float(item[DATETIME_KEY]) - unix_timestamp_int) * 1e6)  # マイクロ秒単位に変換
         standard_time = datetime.datetime.fromtimestamp(unix_timestamp_int) + datetime.timedelta(microseconds=unix_timestamp_frac)
-        if(output_mode.lower() in ['mysql','sqlite']):
+        if(output_mode.lower() in OUTPUT_SQL_MODE):
             timestamp = standard_time.strftime("%Y-%m-%d %H:%M:%S")
         else:
             if(timestamp_mode.lower() in TIMESTAMP_MODE):
@@ -107,7 +108,7 @@ def get_line_text(users, item, channel, timestamp_mode, output_mode):
         msg = timestamp+name+text+urls+channel
         msg_id = hashlib.sha256(msg.encode()).hexdigest()
     
-    if(output_mode.lower() in ['mysql','sqlite']):
+    if(output_mode.lower() in OUTPUT_SQL_MODE):
         return f"('{timestamp}','{name}','{text}','{urls}','{msg_id}','{channel}')"
     else:
         return f'"{timestamp}","{name}","{text}","{urls}","{msg_id}","{channel}"\n'
@@ -145,7 +146,7 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
     # jsonファイルを省いたチャンネル名のフォルダ一覧の取得
     channels = sorted(os.listdir(path=source_dir))
     channels = [x for x in channels if not x.endswith('.json')] 
-    if(output_mode.lower() in ['mysql','sqlite']):
+    if(output_mode.lower() in OUTPUT_SQL_MODE):
         if(output_mode.lower() in ['mysql']):
             out_file_path = shutil.copy2("slack_log_mysql_template.sql",f"{output_dir}/slack_log_mysql.sql")
         elif(output_mode.lower() in ['sqlite']):
@@ -190,7 +191,7 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
         
 
     users = get_users(f'{source_dir}/{USER_FILE_NAME}')
-    if(output_mode.lower() in ['mysql','sqlite']):
+    if(output_mode.lower() in OUTPUT_SQL_MODE):
         hasHeader = False
         isFirst = True
         header = """
@@ -232,7 +233,7 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
     isFirst = True
 
     # SQL出力
-    if(output_mode.lower() in ['mysql','sqlite']):
+    if(output_mode.lower() in OUTPUT_SQL_MODE):
         for channel in channels: 
 
             print(f'[{channel}]')
@@ -350,6 +351,123 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
 
         print(f'{len(channels)} channels converted.')
 
+def make_template(out_file_path,output_mode='mysql'):
+    if(os.path.exists(out_file_path) == False):
+        f = open(out_file_path, 'w', encoding='utf-8')
+        if(output_mode=='mysql'):
+            f.write(mysql_template())
+            f.close()
+        elif(output_mode=='sqlite'):
+            f.write(sqlite_template())
+            f.close()
+        else:
+            f.close()
+
+def mysql_template():
+    return """
+        -- データベース: `slack_log`
+        SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+        START TRANSACTION;
+        SET time_zone = "+09:00";
+        --
+        -- データベース: `slack_log`
+        --
+        CREATE DATABASE IF NOT EXISTS `slack_log` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+        USE `slack_log`;
+        -- --------------------------------------------------------
+        --
+        -- テーブルの構造 `channels`
+        --
+        CREATE TABLE `channels` (
+        `channel_id` varchar(16) NOT NULL,
+        `name` varchar(255) DEFAULT NULL,
+        `is_private` tinyint(1) DEFAULT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='チャンネル情報';
+        -- --------------------------------------------------------
+        --
+        -- テーブルの構造 `message`
+        --
+        CREATE TABLE `message` (
+        `timestamp` timestamp NULL DEFAULT NULL,
+        `name` varchar(255) DEFAULT NULL,
+        `text` text,
+        `files` varchar(2083) DEFAULT NULL,
+        `msgid` varchar(255) NOT NULL,
+        `channel` varchar(255) DEFAULT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        -- --------------------------------------------------------
+        --
+        -- テーブルの構造 `users`
+        --
+        CREATE TABLE `users` (
+        `user_id` varchar(16) NOT NULL,
+        `display_name` varchar(255) DEFAULT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        --
+        -- ダンプしたテーブルのインデックス
+        --
+        --
+        -- テーブルのインデックス `channels`
+        --
+        ALTER TABLE `channels`
+        ADD PRIMARY KEY (`channel_id`);
+        --
+        -- テーブルのインデックス `message`
+        --
+        ALTER TABLE `message`
+        ADD PRIMARY KEY (`msgid`);
+        --
+        -- テーブルのインデックス `users`
+        --
+        ALTER TABLE `users`
+        ADD PRIMARY KEY (`user_id`);
+        COMMIT;
+    """
+
+
+def sqlite_template():
+    return """
+        -- データベース: `slack_log`
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        --
+        -- データベース: `slack_log`
+        --
+        -- --------------------------------------------------------
+        --
+        -- テーブルの構造 `channels`
+        --
+        CREATE TABLE IF NOT EXISTS `channels` (
+        `channel_id` TEXT NOT NULL,
+        `name` TEXT DEFAULT NULL,
+        `is_private` INTEGER DEFAULT NULL
+        );
+
+        -- --------------------------------------------------------
+        --
+        -- テーブルの構造 `message`
+        --
+        CREATE TABLE IF NOT EXISTS `message` (
+        `timestamp` TEXT DEFAULT NULL,
+        `name` TEXT DEFAULT NULL,
+        `text` TEXT,
+        `files` TEXT DEFAULT NULL,
+        `msgid` TEXT NOT NULL,
+        `channel` TEXT DEFAULT NULL
+        );
+        -- --------------------------------------------------------
+        --
+        -- テーブルの構造 `users`
+        --
+        CREATE TABLE IF NOT EXISTS `users` (
+        `user_id` TEXT NOT NULL,
+        `display_name` TEXT DEFAULT NULL
+        );
+        COMMIT;
+    """
+
+
+
 if __name__ == '__main__':
     # 引数からソースフォルダ情報取得
     argv = sys.argv
@@ -370,5 +488,12 @@ if __name__ == '__main__':
     unzip_source_dir = os.path.splitext(source_file)[0]
 
     unzip([source_file,unzip_source_dir])
+
+    # テンプレートファイルがない場合は作る
+    if(output_mode in OUTPUT_SQL_MODE):
+        if(output_mode=='mysql'):
+            make_template('slack_log_mysql_template.sql',output_mode)
+        elif(output_mode=='sqlite'):
+            make_template('slack_log_sqlite_template.sql',output_mode)
 
     convert_json_to_csv_for_slack(unzip_source_dir,timestamp_mode,output_mode)
