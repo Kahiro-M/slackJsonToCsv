@@ -66,7 +66,7 @@ def replace_mentions(text, mentions_dict):
 # 1メッセージのjson辞書データをカンマ区切りの1行データに変換
 def get_line_text(users, item, channel, timestamp_mode, output_mode):
 
-    text = f'{item[TEXT_KEY]}'.replace('"', '\"').replace('"', '""')
+    text = f'{item[TEXT_KEY]}'.replace('"', '\"').replace('"', '""').replace("'","''")
     text = replace_mentions(text, users)
 
     name = ''
