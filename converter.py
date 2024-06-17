@@ -5,7 +5,6 @@ import os
 import glob
 import json
 import hashlib
-from unziplib import unzip
 import datetime
 import shutil
 import sqlite3
@@ -487,7 +486,7 @@ if __name__ == '__main__':
     source_file = argv[1]
     unzip_source_dir = os.path.splitext(source_file)[0]
 
-    unzip([source_file,unzip_source_dir])
+    shutil.unpack_archive(source_file,unzip_source_dir)
 
     # テンプレートファイルがない場合は作る
     if(output_mode in OUTPUT_SQL_MODE):
