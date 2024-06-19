@@ -172,8 +172,16 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',is_upsert=False,o
         channels_json_dic = json_file_to_data(f"{source_dir}/channels.json")
 
         for channel in channels_json_dic: 
-            insertLines = f"('{channel['id']}','{channel['name']}','{'False' if channel.get('is_private') == None  else channel['is_private']}')"
-            upsertLines = f"{upsertHeader} {insertLines} ON DUPLICATE KEY UPDATE `channel_id`='{channel['id']}',`name`='{channel['name']}',`is_private`='{'False' if channel.get('is_private') == None  else channel['is_private']}';\n"
+            if(channel.get('is_private') == None):
+                isPrivate = 0
+            else:
+                if(channel['is_private'] == True):
+                    isPrivate = 1
+                else:
+                    isPrivate = 0
+
+            insertLines = f"('{channel['id']}','{channel['name']}','{isPrivate}')"
+            upsertLines = f"{upsertHeader} {insertLines} ON DUPLICATE KEY UPDATE `channel_id`='{channel['id']}',`name`='{channel['name']}',`is_private`='{isPrivate}';\n"
             if(isFirst == True):
                 isFirst = False
             else:
