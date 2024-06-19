@@ -27,6 +27,7 @@ USER_FILE_NAME = 'users.json'
 TIMESTAMP_MODE = ['kintone','iso8601']
 OUTPUT_MODE = ['csv','mysql','sqlite']
 OUTPUT_SQL_MODE = ['mysql','sqlite']
+UNZIP_MODE = ['1','true','nozip','notzip','not_zip']
 
 # functions =====================
 
@@ -168,10 +169,10 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
 
         for channel in channels_json_dic: 
             if(isFirst == True):
-                lines = f"('{channel['id']}','{channel['name']}','{channel['is_private']}')"
+                lines = f"('{channel['id']}','{channel['name']}','{'False' if channel.get('is_private') == None  else channel['is_private']}')"
                 isFirst = False
             else:
-                lines = f",\n('{channel['id']}','{channel['name']}','{channel['is_private']}')"
+                lines = f",\n('{channel['id']}','{channel['name']}','{'False' if channel.get('is_private') == None  else channel['is_private']}')"
             
             
             # SlackLogSQLファイルに書き込み
@@ -468,6 +469,10 @@ def sqlite_template():
 
 
 if __name__ == '__main__':
+    print('=======================================')
+    print('JSON to CSV/SQL for Slack')
+    print('v.1.0.8')
+    print('=======================================')
     # 引数からソースフォルダ情報取得
     argv = sys.argv
 
@@ -476,17 +481,32 @@ if __name__ == '__main__':
     if len(argv) == 2:
         timestamp_mode = ''
         output_mode = ''
+        unzip_mode = ''
     if len(argv) == 3:
         timestamp_mode = argv[2]
         output_mode = ''
+        unzip_mode = ''
     if len(argv) == 4:
         timestamp_mode = argv[2]
         output_mode = argv[3]
+        unzip_mode = ''
+    if len(argv) == 5:
+        timestamp_mode = argv[2]
+        output_mode = argv[3]
+        unzip_mode = argv[4]
 
     source_file = argv[1]
     unzip_source_dir = os.path.splitext(source_file)[0]
 
-    shutil.unpack_archive(source_file,unzip_source_dir)
+    if(unzip_mode.lower() in UNZIP_MODE):
+        is_not_zip = True
+    else:
+        is_not_zip = False
+
+    if(is_not_zip):
+        unzip_source_dir = source_file
+    else:
+        shutil.unpack_archive(source_file,unzip_source_dir)
 
     # テンプレートファイルがない場合は作る
     if(output_mode in OUTPUT_SQL_MODE):
