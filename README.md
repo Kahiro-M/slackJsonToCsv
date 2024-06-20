@@ -27,13 +27,13 @@ check for [official site](https://slack.com/intl/ja-jp/help/articles/201658943-%
 #          'sqlite'      -> slack_log_sqlite.sql (SQLite format) and SlackLog.db output
 #                           (timestamp format [YYYY-MM-DD HH:MM:SS] only)
 #          other or NULL ->  *.csv output
-# argv 4 : unzip mode
-#          '1'           -> argv 1 is unzipped folder path
-#          'true'        -> argv 1 is unzipped folder path
-#          'nozip'       -> argv 1 is unzipped folder path
-#          'notzip'      -> argv 1 is unzipped folder path
-#          'not_zip'     -> argv 1 is unzipped folder path
-#          other or NULL -> argv 1 is zip file
+# argv 4 : SQL mode
+#          'create'             -> create database and first insert
+#          'upsert' or 'update' -> update or insert to database (MySQL ONLY)
+#          other or NULL        -> create database and first insert
+# argv 5 : unzip mode
+#          '1' or 'true' or 'nozip' or 'notzip' or 'not_zip' -> argv 1 is unzipped folder path
+#          other or NULL                                     -> argv 1 is zip file
 
 
 # ex.)
@@ -51,7 +51,16 @@ $ python converter.py slack_log.zip other sqlite
 # slack_csv_output/SlackLog.db
 # csv timestamp format is [YYYY-MM-DD HH:MM:SS]
 
-$ python converter.py "Slack official export unzipped" other mysql notzip
+
+$ python converter.py slack_log.zip other mysql upsert
+
+# slack_csv_output/slack_log_sqlite.sql
+# csv timestamp format is [YYYY-MM-DD HH:MM:SS]
+
+
+$ python converter.py "Slack official export unzipped" other mysql create notzip
+
 # slack_csv_output/slack_log_mysql.sql
 # csv timestamp format is [YYYY-MM-DD HH:MM:SS]
+
 ```

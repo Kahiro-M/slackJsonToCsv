@@ -27,6 +27,7 @@ USER_FILE_NAME = 'users.json'
 TIMESTAMP_MODE = ['kintone','iso8601']
 OUTPUT_MODE = ['csv','mysql','sqlite']
 OUTPUT_SQL_MODE = ['mysql','sqlite']
+SQL_MODE = ['upsert', 'update']
 UNZIP_MODE = ['1','true','nozip','notzip','not_zip']
 
 # functions =====================
@@ -64,7 +65,7 @@ def replace_mentions(text, mentions_dict):
     return text
 
 # 1メッセージのjson辞書データをカンマ区切りの1行データに変換
-def get_line_text(users, item, channel, timestamp_mode, output_mode):
+def get_line_text(users, item, channel, timestamp_mode, output_mode, get_param=False):
 
     text = f'{item[TEXT_KEY]}'.replace('"', '\"').replace('"', '""').replace("'","''")
     text = replace_mentions(text, users)
@@ -109,7 +110,10 @@ def get_line_text(users, item, channel, timestamp_mode, output_mode):
         msg_id = hashlib.sha256(msg.encode()).hexdigest()
     
     if(output_mode.lower() in OUTPUT_SQL_MODE):
-        return f"('{timestamp}','{name}','{text}','{urls}','{msg_id}','{channel}')"
+        if(get_param):
+            return timestamp,name,text,urls,msg_id,channel
+        else:
+            return f"('{timestamp}','{name}','{text}','{urls}','{msg_id}','{channel}')"
     else:
         return f'"{timestamp}","{name}","{text}","{urls}","{msg_id}","{channel}"\n'
 
@@ -127,7 +131,7 @@ def get_query(query_file_path):
 
 # core logics =====================
 
-def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'):
+def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',is_upsert=False,output_mode='csv'):
 
     if not os.path.exists(source_dir):
         failed(f'not exists directory: {source_dir}')
@@ -156,37 +160,52 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
 
         hasHeader = False
         isFirst = True
-        header = """
+        createHeader = """
             --
             -- テーブルのデータのダンプ `channels`
             --
             
             INSERT INTO `channels` (`channel_id`, `name`, `is_private`) VALUES
         """
-        lines = ''
+        upsertHeader = 'INSERT INTO `channels` (`channel_id`, `name`, `is_private`) VALUES'
+
+        insertLines = ''
+        upsertLines = ''
 
         channels_json_dic = json_file_to_data(f"{source_dir}/channels.json")
 
         for channel in channels_json_dic: 
+            if(channel.get('is_private') == None):
+                isPrivate = 0
+            else:
+                if(channel['is_private'] == True):
+                    isPrivate = 1
+                else:
+                    isPrivate = 0
+
+            insertLines = f"('{channel['id']}','{channel['name']}','{isPrivate}')"
+            upsertLines = f"{upsertHeader} {insertLines} ON DUPLICATE KEY UPDATE `channel_id`='{channel['id']}',`name`='{channel['name']}',`is_private`='{isPrivate}';\n"
             if(isFirst == True):
-                lines = f"('{channel['id']}','{channel['name']}','{'False' if channel.get('is_private') == None  else channel['is_private']}')"
                 isFirst = False
             else:
-                lines = f",\n('{channel['id']}','{channel['name']}','{'False' if channel.get('is_private') == None  else channel['is_private']}')"
-            
+                insertLines = ",\n" + insertLines
             
             # SlackLogSQLファイルに書き込み
             f = open(out_file_path, 'a', encoding='utf-8')
-            if(hasHeader == False):
-                f.write(header)
-                hasHeader = True
-            f.write(lines)
+            if(is_upsert):
+                f.write(upsertLines)
+            else:
+                if(hasHeader == False):
+                    f.write(createHeader)
+                    hasHeader = True
+                f.write(insertLines)
             f.close()
 
         # SlackLogSQLファイルの末尾に;を書き込む
-        f = open(out_file_path, 'a', encoding='utf-8')
-        f.write(';')
-        f.close()
+        if(not is_upsert):
+            f = open(out_file_path, 'a', encoding='utf-8')
+            f.write(';')
+            f.close()
         print(f'{len(channels_json_dic)} channels SQL converted.')
         
 
@@ -194,37 +213,44 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
     if(output_mode.lower() in OUTPUT_SQL_MODE):
         hasHeader = False
         isFirst = True
-        header = """
+        createHeader = """
             --
             -- テーブルのデータのダンプ `users`
             --
             
             INSERT INTO `users` (`user_id`, `display_name`) VALUES
         """
-        lines = ''
+        upsertHeader = 'INSERT INTO `users` (`user_id`, `display_name`) VALUES'
+
+        insertLines = ''
+        upsertLines = ''
 
         users_json_dic = json_file_to_data(f"{source_dir}/users.json")
 
         for user in users_json_dic: 
+            insertLines = f"('{user['id']}','{user['profile']['display_name']}')"
+            upsertLines = f"{upsertHeader} {insertLines} ON DUPLICATE KEY UPDATE `user_id`='{user['id']}', `display_name`='{user['profile']['display_name']}';\n"
             if(isFirst == True):
-                lines = f"('{user['id']}','{user['profile']['display_name']}')"
                 isFirst = False
             else:
-                lines = f",\n('{user['id']}','{user['profile']['display_name']}')"
-            
+                insertLines = ",\n" + insertLines
             
             # SlackLogSQLファイルに書き込み
             f = open(out_file_path, 'a', encoding='utf-8')
-            if(hasHeader == False):
-                f.write(header)
-                hasHeader = True
-            f.write(lines)
+            if(is_upsert):
+                f.write(upsertLines)
+            else:
+                if(hasHeader == False):
+                    f.write(createHeader)
+                    hasHeader = True
+                f.write(insertLines)
             f.close()
 
         # SlackLogSQLファイルの末尾に;を書き込む
-        f = open(out_file_path, 'a', encoding='utf-8')
-        f.write(';')
-        f.close()
+        if(not is_upsert):
+            f = open(out_file_path, 'a', encoding='utf-8')
+            f.write(';')
+            f.close()
         print(f'{len(users_json_dic)} users SQL converted.')
 
 
@@ -239,15 +265,17 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
             print(f'[{channel}]')
 
             json_files = sorted(glob.glob(f"{source_dir}/{channel}/*.json"))
-            header = """
+            createHeader = """
                 --
                 -- テーブルのデータのダンプ `message`
                 --
                 
                 INSERT INTO `message` (`timestamp`, `name`, `text`, `files`, `msgid`, `channel`) VALUES
             """
+            upsertHeader = 'INSERT INTO `message` (`timestamp`, `name`, `text`, `files`, `msgid`, `channel`) VALUES'
             
-            lines = ''
+            insertLines = ''
+            upsertLines = ''
 
             # 日付名のjsonファイル単位でループ
             for file_full_path in json_files: 
@@ -262,29 +290,36 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
 
                     if not TEXT_KEY in item.keys():
                         continue
-
-                    if(isFirst == True):
-                        lines += get_line_text(users, item, channel,timestamp_mode,output_mode)
-                        isFirst = False
+                    
+                    if(is_upsert):
+                        upsertTimestamp,upsertName,upsertText,upsertUrls,upsertMsg_id,channel = get_line_text(users, item, channel,timestamp_mode,output_mode,is_upsert)
+                        upsertLines += f"{upsertHeader} {get_line_text(users, item, channel,timestamp_mode,output_mode)} ON DUPLICATE KEY UPDATE `timestamp`='{upsertTimestamp}', `name`='{upsertName}', `text`='{upsertText}', `files`='{upsertUrls}', `msgid`='{upsertMsg_id}', `channel`='{channel}';\n"
                     else:
-                        lines += ',\n'+get_line_text(users, item, channel,timestamp_mode,output_mode)
+                        if(isFirst == True):
+                            insertLines += get_line_text(users, item, channel,timestamp_mode,output_mode)
+                            isFirst = False
+                        else:
+                            insertLines += ',\n'+get_line_text(users, item, channel,timestamp_mode,output_mode)
 
                 print(f'\t{date} ({len(json_dic)})')
 
 
             # SlackLogSQLファイルに書き込み
             f = open(out_file_path, 'a', encoding='utf-8')
-            if(hasHeader == False):
-                f.write(header)
-                hasHeader = True
-            f.write(lines)
+            if(is_upsert):
+                f.write(upsertLines)
+            else:
+                if(hasHeader == False):
+                    f.write(createHeader)
+                    hasHeader = True
+                f.write(insertLines)
             f.close()
 
         # SlackLogSQLファイルの末尾に;を書き込む
-        f = open(out_file_path, 'a', encoding='utf-8')
-        f.write(';')
-        f.close()
-
+        if(not is_upsert):
+            f = open(out_file_path, 'a', encoding='utf-8')
+            f.write(';')
+            f.close()
         print(f'{len(channels)} channels SQL converted.')
 
         # SQLiteはDBファイルも作成
@@ -351,11 +386,12 @@ def convert_json_to_csv_for_slack(source_dir,timestamp_mode='',output_mode='csv'
 
         print(f'{len(channels)} channels converted.')
 
-def make_template(out_file_path,output_mode='mysql'):
+def make_template(out_file_path,output_mode='mysql',is_upsert=False):
     if(os.path.exists(out_file_path) == False):
         f = open(out_file_path, 'w', encoding='utf-8')
         if(output_mode=='mysql'):
-            f.write(mysql_template())
+            if(is_upsert==False):
+                f.write(mysql_template())
             f.close()
         elif(output_mode=='sqlite'):
             f.write(sqlite_template())
@@ -470,8 +506,8 @@ def sqlite_template():
 
 if __name__ == '__main__':
     print('=======================================')
-    print('JSON to CSV/SQL for Slack')
-    print('v.1.0.8')
+    print('JSON to CSV/SQL for Slack Export File')
+    print('v.1.0.9')
     print('=======================================')
     # 引数からソースフォルダ情報取得
     argv = sys.argv
@@ -481,22 +517,36 @@ if __name__ == '__main__':
     if len(argv) == 2:
         timestamp_mode = ''
         output_mode = ''
+        sql_mode = ''
         unzip_mode = ''
     if len(argv) == 3:
         timestamp_mode = argv[2]
         output_mode = ''
+        sql_mode = ''
         unzip_mode = ''
     if len(argv) == 4:
         timestamp_mode = argv[2]
         output_mode = argv[3]
+        sql_mode = ''
         unzip_mode = ''
     if len(argv) == 5:
         timestamp_mode = argv[2]
         output_mode = argv[3]
-        unzip_mode = argv[4]
+        sql_mode = argv[4]
+        unzip_mode = ''
+    if len(argv) == 6:
+        timestamp_mode = argv[2]
+        output_mode = argv[3]
+        sql_mode = argv[4]
+        unzip_mode = argv[5]
 
     source_file = argv[1]
     unzip_source_dir = os.path.splitext(source_file)[0]
+
+    if(sql_mode.lower() in SQL_MODE):
+        is_upsert = True
+    else:
+        is_upsert = False
 
     if(unzip_mode.lower() in UNZIP_MODE):
         is_not_zip = True
@@ -511,8 +561,8 @@ if __name__ == '__main__':
     # テンプレートファイルがない場合は作る
     if(output_mode in OUTPUT_SQL_MODE):
         if(output_mode=='mysql'):
-            make_template('slack_log_mysql_template.sql',output_mode)
+            make_template('slack_log_mysql_template.sql',output_mode,is_upsert)
         elif(output_mode=='sqlite'):
             make_template('slack_log_sqlite_template.sql',output_mode)
 
-    convert_json_to_csv_for_slack(unzip_source_dir,timestamp_mode,output_mode)
+    convert_json_to_csv_for_slack(unzip_source_dir,timestamp_mode,is_upsert,output_mode)
